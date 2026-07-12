@@ -48,12 +48,42 @@ def compute_isochrone(region_id, lon, lat, mode="walk", minutes=(5, 10, 15)):
         coords = _first_polygon(geom)
         if coords:
             bands.append({"minutes": m, "reachable_nodes": len(pts), "coords": coords})
-            with db.cursor() as cur:
-                cur.execute("INSERT INTO isochrone_results"
-                            "(region_id,mode,travel_minutes,origin_lon,origin_lat,geom,reachable_nodes) "
-                            "VALUES(?,?,?,?,?,?,?)",
-                            (region_id, mode, m, lon, lat, db.j(coords), len(pts)))
     return {"origin": [lon, lat], "origin_node": origin, "mode": mode, "bands": bands}
+
+
+# --------------------------------------------------------------------------
+# Named saves (explicit user action — computation no longer auto-persists)
+# --------------------------------------------------------------------------
+def save(region_id, name, mode, origin, bands):
+    with db.cursor() as cur:
+        cur.execute("INSERT INTO isochrone_saves(region_id,name,mode,origin_lon,origin_lat,bands) "
+                    "VALUES(?,?,?,?,?,?)",
+                    (region_id, name, mode, origin[0], origin[1], db.j(bands)))
+        return cur.lastrowid
+
+
+def list_saved(region_id):
+    with db.cursor() as cur:
+        cur.execute("SELECT id,name,mode,origin_lon,origin_lat,created_at "
+                    "FROM isochrone_saves WHERE region_id=? ORDER BY id DESC", (region_id,))
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_saved(save_id):
+    with db.cursor() as cur:
+        cur.execute("SELECT * FROM isochrone_saves WHERE id=?", (save_id,))
+        row = cur.fetchone()
+    if not row:
+        return None
+    out = dict(row)
+    out["bands"] = db.unj(out["bands"], [])
+    out["origin"] = [out.pop("origin_lon"), out.pop("origin_lat")]
+    return out
+
+
+def delete_saved(save_id):
+    with db.cursor() as cur:
+        cur.execute("DELETE FROM isochrone_saves WHERE id=?", (save_id,))
 
 
 def _metre_buffer(lat, metres):

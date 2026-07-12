@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import (analytics, database as db, isochrones, optimization, osm,
-               reports, scenarios)
+               reports, scenarios, simulation)
 
 FRONTEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
 
@@ -243,7 +243,7 @@ def layer_streets(region_id: int, time_slot: str = "midday"):
         cur.execute(
             "SELECT e.id,e.name,e.highway,e.oneway,e.maxspeed,e.length,e.geom,"
             "a.betweenness,a.closeness,a.modeled_flow,a.co2_emissions,a.noise_db,"
-            "a.street_iq,a.completeness "
+            "a.street_iq,a.completeness,a.voc,a.congested_speed "
             "FROM street_edges e LEFT JOIN street_analytics a ON a.edge_id=e.id "
             "WHERE e.region_id=?", (region_id,))
         for r in cur.fetchall():
@@ -261,6 +261,8 @@ def layer_streets(region_id: int, time_slot: str = "midday"):
                     "modeled_flow": flow, "co2_emissions": co2,
                     "noise_db": noise, "street_iq": r["street_iq"],
                     "completeness": r["completeness"],
+                    "voc": round((r["voc"] or 0) * factor, 3),
+                    "congested_speed": r["congested_speed"],
                 },
             })
     return _fc(feats)
@@ -366,7 +368,7 @@ def layer_buildings(region_id: int):
 @app.get("/api/regions/{region_id}/histogram")
 def histogram(region_id: int, metric: str = "street_iq", bins: int = 20):
     allowed = {"street_iq", "betweenness", "closeness", "co2_emissions", "noise_db",
-               "modeled_flow", "completeness"}
+               "modeled_flow", "completeness", "voc", "congested_speed"}
     if metric not in allowed:
         raise HTTPException(400, f"metric must be one of {allowed}")
     with db.cursor() as cur:
@@ -396,6 +398,133 @@ class IsochroneReq(BaseModel):
 def make_isochrone(region_id: int, body: IsochroneReq):
     return isochrones.compute_isochrone(region_id, body.lon, body.lat, body.mode,
                                         tuple(body.minutes))
+
+
+class IsochroneSaveReq(BaseModel):
+    name: str
+    mode: str
+    origin: list[float]           # [lon, lat]
+    bands: list[dict]
+
+
+@app.post("/api/regions/{region_id}/isochrones/save")
+def isochrone_save(region_id: int, body: IsochroneSaveReq):
+    sid = isochrones.save(region_id, body.name.strip() or "Isochrone",
+                          body.mode, body.origin, body.bands)
+    return {"save_id": sid}
+
+
+@app.get("/api/regions/{region_id}/isochrones/saved")
+def isochrone_saved(region_id: int):
+    return isochrones.list_saved(region_id)
+
+
+@app.get("/api/isochrones/saved/{save_id}")
+def isochrone_get(save_id: int):
+    res = isochrones.get_saved(save_id)
+    if not res:
+        raise HTTPException(404, "isochrone save not found")
+    return res
+
+
+@app.delete("/api/isochrones/saved/{save_id}")
+def isochrone_delete(save_id: int):
+    isochrones.delete_saved(save_id)
+    return {"ok": True}
+
+
+# --------------------------------------------------------------------------
+# Multi-year simulation
+# --------------------------------------------------------------------------
+class SimCreate(BaseModel):
+    name: str | None = None
+    years: int | None = None
+    pop_growth_pct: float | None = None
+    car_ownership_growth_pct: float | None = None
+    transit_invest: float | None = None
+    bike_invest: float | None = None
+    road_budget: float | None = None
+    pedestrianization: bool | None = None
+    trip_rate: float | None = None
+    agents_sample: int | None = None
+    msa_iters: int | None = None
+    seed: int | None = None
+    start_population: float | None = None
+
+
+@app.post("/api/projects/{project_id}/simulations")
+def sim_create(project_id: int, body: SimCreate):
+    with db.cursor() as cur:
+        cur.execute("SELECT region_id FROM projects WHERE id=?", (project_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "project not found")
+    run_id = simulation.start_run(project_id, row["region_id"], body.model_dump())
+    return {"run_id": run_id}
+
+
+@app.get("/api/projects/{project_id}/simulations")
+def sim_list(project_id: int):
+    return simulation.list_runs(project_id)
+
+
+@app.get("/api/simulations/{run_id}")
+def sim_status(run_id: int):
+    run = simulation.get_run(run_id)
+    if not run:
+        raise HTTPException(404, "run not found")
+    return run
+
+
+@app.get("/api/simulations/{run_id}/years/{year}")
+def sim_year(run_id: int, year: int):
+    res = simulation.get_year(run_id, year)
+    if res is None:
+        raise HTTPException(404, "year not computed")
+    return res
+
+
+@app.get("/api/simulations/{run_id}/years/{year}/agents")
+def sim_agents(run_id: int, year: int):
+    return {"agents": simulation.get_agents(run_id, year)}
+
+
+@app.get("/api/simulations/{run_id}/series")
+def sim_series(run_id: int):
+    return simulation.get_series(run_id)
+
+
+@app.get("/api/simulations/{run_id}/export.csv")
+def sim_export_csv(run_id: int):
+    rows = simulation.get_series(run_id)
+    if not rows:
+        return PlainTextResponse("no data", status_code=404)
+    cols = list(rows[0].keys())
+    lines = [",".join(cols)]
+    for r in rows:
+        lines.append(",".join(str(r.get(c, "")) for c in cols))
+    return PlainTextResponse("\n".join(lines), media_type="text/csv",
+                             headers={"Content-Disposition":
+                                      f"attachment; filename=simulation_{run_id}.csv"})
+
+
+@app.get("/api/simulations/{run_id}/export.json")
+def sim_export_json(run_id: int):
+    run = simulation.get_run(run_id)
+    if not run:
+        raise HTTPException(404, "run not found")
+    years = [simulation.get_year(run_id, y) for y in run["years_done"]]
+    return JSONResponse({"run": {k: run[k] for k in
+                                 ("id", "name", "params", "status", "created_at")},
+                         "series": simulation.get_series(run_id), "years": years},
+                        headers={"Content-Disposition":
+                                 f"attachment; filename=simulation_{run_id}.json"})
+
+
+@app.delete("/api/simulations/{run_id}")
+def sim_delete(run_id: int):
+    simulation.delete_run(run_id)
+    return {"ok": True}
 
 
 # --------------------------------------------------------------------------

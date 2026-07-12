@@ -160,6 +160,48 @@ CREATE TABLE IF NOT EXISTS isochrone_results (
     reachable_nodes INTEGER
 );
 
+-- Named, user-saved isochrones (bands stored together as one save)
+CREATE TABLE IF NOT EXISTS isochrone_saves (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    region_id INTEGER REFERENCES regions(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    mode TEXT,
+    origin_lon REAL, origin_lat REAL,
+    bands TEXT NOT NULL,         -- JSON [{minutes, reachable_nodes, coords}]
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_isosave_region ON isochrone_saves(region_id);
+
+-- Tier 3: multi-year agent simulation
+CREATE TABLE IF NOT EXISTS sim_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+    region_id INTEGER REFERENCES regions(id) ON DELETE CASCADE,
+    name TEXT,
+    params TEXT NOT NULL,        -- JSON simulation parameters
+    status TEXT DEFAULT 'queued',-- queued|running|done|error
+    progress REAL DEFAULT 0,     -- 0..1
+    message TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_simrun_project ON sim_runs(project_id);
+
+CREATE TABLE IF NOT EXISTS sim_years (
+    run_id INTEGER REFERENCES sim_runs(id) ON DELETE CASCADE,
+    year INTEGER NOT NULL,
+    metrics TEXT NOT NULL,       -- JSON aggregate indicators for the year
+    deltas TEXT,                 -- JSON network changes made this year
+    voc TEXT,                    -- JSON {edge_id: v/c} for congested edges
+    PRIMARY KEY (run_id, year)
+);
+
+CREATE TABLE IF NOT EXISTS sim_agents (
+    run_id INTEGER REFERENCES sim_runs(id) ON DELETE CASCADE,
+    year INTEGER NOT NULL,
+    agents TEXT NOT NULL,        -- JSON sampled agent trajectories
+    PRIMARY KEY (run_id, year)
+);
+
 -- Tier 3: scenarios & decisions
 CREATE TABLE IF NOT EXISTS scenarios (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -196,6 +238,8 @@ def _migrate(conn):
     """Add columns introduced after the first release to existing databases."""
     migrations = [
         ("street_analytics", "completeness", "REAL"),
+        ("street_analytics", "voc", "REAL"),              # volume/capacity ratio
+        ("street_analytics", "congested_speed", "REAL"),  # km/h after BPR delay
     ]
     for table, col, coltype in migrations:
         cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]

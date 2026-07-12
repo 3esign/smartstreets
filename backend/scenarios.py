@@ -104,8 +104,7 @@ def _metrics(region_id, overrides):
         ov = overrides.get(e["id"], {})
         speed = ov.get("maxspeed") or e["maxspeed"] or DEFAULT_MS.get(
             (e["highway"] or "").split("_")[0], 40)
-        co2_gpkm = 180 + 0.0035 * (speed - 70) ** 2
-        total_co2 += co2_gpkm * (e["length"] or 0) / 1000.0
+        total_co2 += analytics.co2_gpkm(speed) * (e["length"] or 0) / 1000.0
         is_ow = ov.get("oneway", e["oneway"])
         if ov.get("action") == "direction_change":
             is_ow = ov.get("oneway", 1)

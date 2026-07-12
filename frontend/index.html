@@ -66,7 +66,8 @@
           <option value="closeness">Closeness centrality</option>
           <option value="modeled_flow">Modeled flow</option>
           <option value="co2_emissions">CO₂ emissions</option>
-          <option value="noise_db">Noise (dB)</option>
+          <option value="noise_db">Noise (dB, CNOSSOS-EU)</option>
+          <option value="voc">Congestion (v/c, BPR)</option>
           <option value="completeness">Data quality</option>
           <option value="highway">Road class</option>
         </select>
@@ -80,10 +81,22 @@
         </select>
 
         <h4>Basemap</h4>
-        <select id="basemap" data-tooltip="Swap between the vector OpenStreetMap cartography and high-resolution Esri satellite imagery.">
+        <select id="basemap" data-tooltip="Swap between OpenStreetMap cartography, Esri satellite imagery, or no basemap at all (pure fetched geometry).">
           <option value="vector">Vector (OSM)</option>
           <option value="satellite">Satellite (Esri)</option>
+          <option value="none">None (blank — geometry only)</option>
         </select>
+      </section>
+
+      <section class="panel" data-tooltip="Manage reachability overlays: toggle, clear, save and reload computed isochrones.">
+        <h3>Isochrones</h3>
+        <label class="chk"><input type="checkbox" id="ly_iso" checked> Show isochrone overlay</label>
+        <div class="scenario-row">
+          <button id="isoSaveBtn" class="btn small2" disabled data-tooltip="Save the current isochrone under a name for later reuse.">💾 Save</button>
+          <button id="isoClearBtn" class="btn small2" data-tooltip="Remove the isochrone overlay from the map.">✕ Clear</button>
+        </div>
+        <h4>Saved</h4>
+        <div id="isoSavedList" class="list"><div class="muted">No saved isochrones.</div></div>
       </section>
     </aside>
 
@@ -106,6 +119,36 @@
       </div>
       <div id="toolHint" class="draw-hint hidden"></div>
       <div id="legend" class="legend hidden"></div>
+
+      <!-- Simulation timeline bar -->
+      <div id="simBar" class="sim-bar hidden">
+        <div class="sim-bar-row">
+          <button id="simPlayYearsBtn" class="tool" title="Auto-advance through years">⏩</button>
+          <span class="sim-year-label">Year <b id="simYearLabel">0</b></span>
+          <input type="range" id="simYearSlider" min="0" max="0" step="1" value="0" />
+          <button id="simPlayBtn" class="tool" title="Play / pause the day animation">▶</button>
+          <select id="simSpeedSel" class="tool-select" title="Animation speed">
+            <option value="120">120×</option>
+            <option value="300" selected>300×</option>
+            <option value="900">900×</option>
+          </select>
+          <span id="simClock" class="sim-clock">07:30</span>
+          <label class="chk sim-chk"><input type="checkbox" id="simShowAgents" checked> Agents</label>
+          <label class="chk sim-chk"><input type="checkbox" id="simShowDeltas" checked> Changes</label>
+          <label class="chk sim-chk"><input type="checkbox" id="simShowCong"> Congestion</label>
+          <button id="simCloseBtn" class="tool" title="Close simulation view">✕</button>
+        </div>
+        <div class="sim-bar-row sim-kpis">
+          <span id="simKpiPop">—</span><span id="simKpiCar">—</span><span id="simKpiCo2">—</span>
+          <span id="simKpiCong">—</span><span id="simKpiAcc">—</span>
+          <span class="sim-legend">
+            <i style="background:#ff6b57"></i>car <i style="background:#38b6ff"></i>transit
+            <i style="background:#2ecc71"></i>bike <i style="background:#f1c40f"></i>walk ·
+            <i style="background:#ffd54d"></i>new link <i style="background:#ff9f43"></i>upgrade
+            <i style="background:#7ee0c8"></i>pedestrianized
+          </span>
+        </div>
+      </div>
       <div id="welcome" class="welcome">
         <div class="welcome-card">
           <div class="welcome-mark">◆</div>
@@ -165,6 +208,40 @@
         <canvas id="compareChart" height="130" style="margin-top:8px" data-tooltip="Graph representing deviation of key metrics (emissions, noise, StreetIQ) from baseline."></canvas>
       </section>
 
+      <section class="panel" data-tooltip="Multi-year agent-based simulation: demographic growth, travel demand, congestion and demand-responsive network evolution.">
+        <h3>Simulation · Years</h3>
+        <label class="slider">Horizon (yrs) <input type="range" id="sim_years" min="5" max="40" step="1" value="20"><span>20</span></label>
+        <label class="slider">Pop growth %/yr <input type="range" id="sim_growth" min="-2" max="4" step="0.1" value="1.2"><span>1.2</span></label>
+        <label class="slider">Road budget /yr <input type="range" id="sim_budget" min="0" max="8" step="0.5" value="2"><span>2</span></label>
+        <label class="slider">Transit invest <input type="range" id="sim_transit" min="0" max="1" step="0.05" value="0.3"><span>0.3</span></label>
+        <label class="slider">Bike invest <input type="range" id="sim_bike" min="0" max="1" step="0.05" value="0.3"><span>0.3</span></label>
+        <label class="slider">Car pref %/yr <input type="range" id="sim_car" min="-2" max="2" step="0.1" value="0.5"><span>0.5</span></label>
+        <label class="chk"><input type="checkbox" id="sim_ped" checked> Allow pedestrianization</label>
+        <button id="simRunBtn" class="btn primary" data-tooltip="Launch the multi-year simulation with the parameters above.">▶ Run simulation</button>
+        <div id="simProgress" class="sim-progress hidden"><div class="bar"><div id="simProgressBar"></div></div><span id="simProgressText"></span></div>
+        <h4>Runs</h4>
+        <div id="simRunList" class="list"><div class="muted">No simulations yet.</div></div>
+        <h4>Trends</h4>
+        <canvas id="simModeChart" height="130" data-tooltip="Evolution of mode shares (car, transit, bike, walk) across simulated years."></canvas>
+        <select id="simKpiSel" style="margin-top:6px">
+          <option value="co2_t_day">CO₂ (t/day)</option>
+          <option value="vkt">Vehicle-km travelled</option>
+          <option value="avg_speed">Average speed (km/h)</option>
+          <option value="congested_km">Congested km (v/c&gt;0.9)</option>
+          <option value="noise_high_km">Noisy street km (&gt;65 dB)</option>
+          <option value="accessibility">Accessibility (Hansen)</option>
+          <option value="avg_trip_min">Avg trip time (min)</option>
+          <option value="population">Population</option>
+          <option value="network_km">Network km</option>
+          <option value="invest_spent">Investment spent</option>
+        </select>
+        <canvas id="simKpiChart" height="130"></canvas>
+        <div class="scenario-row" style="margin-top:6px">
+          <button id="simCsvBtn" class="btn small2">⬇ CSV</button>
+          <button id="simJsonBtn" class="btn small2">⬇ JSON</button>
+        </div>
+      </section>
+
       <section class="panel">
         <h3>Distribution</h3>
         <canvas id="histChart" height="140" data-tooltip="Bar chart showing the frequency distribution of selected street metric."></canvas>
@@ -222,31 +299,49 @@
         <span class="close-modal" id="methodologyClose">✕</span>
       </div>
       <div class="methodology-content">
-        <p class="muted">SmartStreet integrates graph theory, traffic micro-simulation models, and environmental physics to build actionable, explainable indices for street design.</p>
-        
-        <h4>1. StreetIQ Composite Index</h4>
-        <p>The StreetIQ index models the harmony between vehicular throughput utility and human-scale livability. It aggregates four key normalized indicators:</p>
+        <p class="muted">SmartStreet combines graph theory, transport-demand modelling and standardized environmental physics into explainable street-design indices. Full equations, parameters and citations: <strong>docs/METHODOLOGY.md</strong>.</p>
+
+        <h4>1. Network &amp; Congestion</h4>
         <ul>
-          <li><strong>Centrality:</strong> Combines Betweenness Centrality (likelihood of a road being chosen as shortest path) and Closeness Centrality (how accessible a road is from all other points in the network) using NetworkX topological calculations.</li>
-          <li><strong>Modeled Flow:</strong> Employs a gravity routing algorithm estimating neighborhood-level commuter traffic potential.</li>
-          <li><strong>CO₂ Emissions:</strong> Approximated greenhouse impact based on simulated vehicular speeds, flow volume, and road-tier classification.</li>
-          <li><strong>Noise Level (dB):</strong> A logarithmic acoustic simulation calculating decibel propagation based on traffic flow density and speed variables.</li>
+          <li><strong>Centrality:</strong> Betweenness (Freeman 1977; Brandes 2001 algorithm, sampled pivots) and closeness on travel-time weights.</li>
+          <li><strong>Modeled flow:</strong> relative betweenness × HCM-informed class capacity — a standard flow proxy where OD counts are unavailable (Kazerani &amp; Winter 2009; Puzis et al. 2013).</li>
+          <li><strong>Congestion:</strong> BPR volume-delay t = t₀(1 + 0.15·(v/c)⁴) (Bureau of Public Roads 1964) yields v/c and congested speeds, mappable as a layer.</li>
         </ul>
 
-        <h4>2. Active Travel Metrics</h4>
-        <p>Indices representing walking and cycling comfort levels parsed from raw OSM geometry attributes:</p>
+        <h4>2. Environmental Models</h4>
         <ul>
-          <li><strong>Walkability Score:</strong> Evaluates pedestrian safety using pavement surface tags, pathway isolation, and nocturnal lighting.</li>
-          <li><strong>Level of Traffic Stress (LTS):</strong> Ranks street segments (LTS 1 to 4) representing cycling feasibility, from quiet residential streets up to speed-mixed heavy traffic arterials.</li>
+          <li><strong>CO₂:</strong> COPERT / EMEP-EEA average-speed emission curves for petrol &amp; diesel passenger cars (fleet-blended), evaluated at congested speed (Ntziachristos &amp; Samaras 2019).</li>
+          <li><strong>Noise:</strong> simplified CNOSSOS-EU source model (Directive (EU) 2015/996): rolling + propulsion sound power, traffic line source, receiver level at 10 m. WHO 2018 thresholds frame the "noisy km" indicator.</li>
         </ul>
 
-        <h4>3. Algorithmic Optimization Suite</h4>
-        <p>Urban optimization functions designed to identify design enhancements:</p>
+        <h4>3. Active Travel</h4>
         <ul>
-          <li><strong>Signal Placement:</strong> Identifies collision risk and pedestrian isolation conflict points at major road junctions using convergent capacity models.</li>
-          <li><strong>Connectivity Gaps:</strong> Evaluates fragmented pathways to locate target locations where minor pedestrian/cycleway inserts yield maximum network integration.</li>
-          <li><strong>Direction Solver:</strong> Performs greedy directionality switches across selected segments to minimize aggregate traffic bottlenecks and local emissions.</li>
+          <li><strong>Walkability:</strong> infrastructure (0.35) + safety (0.20) + destinations within 250 m (0.25) + intersection density (0.20), per the built-environment "5 D" evidence (Ewing &amp; Cervero 2010; Frank et al. 2010).</li>
+          <li><strong>Cycling LTS 1–4:</strong> Mekuria, Furth &amp; Nixon (2012) criteria using street speed/lanes joined via shared OSM way id.</li>
         </ul>
+
+        <h4>4. StreetIQ Composite</h4>
+        <p>Percentile-normalised weighted composite of centrality, flow, CO₂ and noise (user weights) — a <em>burden/priority</em> index marking streets that carry the network and concentrate externalities (OECD/JRC 2008 composite-indicator practice).</p>
+
+        <h4>5. Multi-Year Agent Simulation</h4>
+        <p>A mesoscopic land-use/transport interaction loop per simulated year (Wegener 2004; Ortúzar &amp; Willumsen 2011):</p>
+        <ul>
+          <li><strong>Growth &amp; location choice:</strong> exponential population growth allocated to zones by logit on accessibility + floor-space capacity (Hansen 1959; McFadden 1974; Waddell 2002).</li>
+          <li><strong>Demand:</strong> gravity distribution with exponential impedance (Wilson 1971); multinomial-logit mode choice among car/transit/bike/walk with policy-driven constants (Train 2009).</li>
+          <li><strong>Assignment:</strong> Method of Successive Averages over BPR-costed shortest paths — approximate Wardrop (1952) user equilibrium (Sheffi 1985).</li>
+          <li><strong>Network evolution:</strong> budgeted densification &amp; exploration rules — capacity upgrades where v/c &gt; 1, new links where spatial detours are severe, optional pedestrianization of calm POI-rich streets (Strano et al. 2012; Barthélemy &amp; Flammini 2008; Mueller et al. 2020).</li>
+          <li><strong>Outputs:</strong> yearly mode shares, VKT/VHT, CO₂ t/day, noisy km, congested km, Hansen accessibility, network growth, investment — plus an animated sample of ~800 agents' space-time trajectories (visualization in the spirit of MATSim; Horni et al. 2016).</li>
+        </ul>
+
+        <h4>6. Optimization Suite</h4>
+        <ul>
+          <li><strong>Signal placement:</strong> conflict exposure = betweenness × converging flow (cf. FHWA 2013).</li>
+          <li><strong>Connectivity gaps:</strong> network/Euclidean detour-ratio screening (Dill 2004).</li>
+          <li><strong>Direction solver:</strong> greedy one-way switches scored on travel time and CO₂.</li>
+        </ul>
+
+        <h4>7. Assumptions &amp; Limitations</h4>
+        <p>Flows are proxies, not counts; noise omits barriers/meteorology; simulation defaults require local calibration — results are scenario explorations, not forecasts; OSM completeness bounds accuracy (see the data-quality layer).</p>
 
         <div class="methodology-footer">
           <p><strong>Developed &amp; Certified by:</strong></p>
@@ -263,5 +358,6 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="/static/config.js"></script>
   <script src="/static/app.js"></script>
+  <script src="/static/sim.js"></script>
 </body>
 </html>

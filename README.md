@@ -57,7 +57,14 @@ Then open **http://localhost:8000**.
 - **Multimodal analytics**: pedestrian **walkability** and cycling **Level-of-Traffic-Stress**
   / bikeability, with the pedestrian and cycling layers colored by their own scores.
 - **Time-of-day**: morning/midday/evening/night demand factors recolor flow, CO₂, noise.
-- **Isochrones**: click a point → walk/cycle/drive reachability polygons (5/10/15 min).
+- **Isochrones**: click a point → walk/cycle/drive reachability polygons (5/10/15 min),
+  with overlay toggle/clear and **named saves** (reload or delete them anytime).
+- **Congestion layer**: BPR volume-delay v/c ratio and congested speeds per street.
+- **Multi-year agent simulation**: mesoscopic LUTI loop (growth → gravity demand →
+  logit mode choice → MSA/BPR equilibrium assignment → budgeted network evolution:
+  upgrades, new links, pedestrianization). Animated agents with a day clock, year
+  timeline, network-change overlay, congestion view, trend charts, CSV/JSON export.
+  Scientifically grounded & fully cited — see `docs/METHODOLOGY.md`.
 - **Optimization engine**: signal placement (conflict index × centrality), connectivity
   gap finder (circuity), and a direction (one-way) solver — rendered as map overlays and
   ranked recommendation cards with confidence levels.
@@ -67,7 +74,8 @@ Then open **http://localhost:8000**.
 - **Exports**: streets CSV, streets GeoJSON, and a printable HTML report (print → PDF).
 - **Dashboard**: MapLibre map, 7 toggleable layers, metric-driven coloring with legend,
   popups, summary metric cards, distribution histogram, region radar profile, project
-  save/load, vector/satellite basemaps, and a polished dark UI.
+  save/load, vector/satellite/**blank** basemaps (blank = fetched geometry only), and a
+  polished dark UI.
 
 ## Deployment
 
@@ -81,11 +89,16 @@ backend/
   app.py         FastAPI app + REST API + static serving
   database.py    SQLite schema & connection layer
   osm.py         Overpass fetching + parsing (bbox tiers)
-  analytics.py   NetworkX centrality, emissions, noise, StreetIQ
+  analytics.py   Centrality, BPR congestion, COPERT CO₂, CNOSSOS noise, StreetIQ
+  simulation.py  Multi-year agent simulator (demand, assignment, evolution)
+  isochrones.py  Reachability computation + named saves
 frontend/
   index.html     Dashboard shell
   app.js         Map, layers, drawing, panels
+  sim.js         Simulation timeline, agent animation, trend charts
   style.css      Styling
+docs/
+  METHODOLOGY.md Full scientific methodology with equations & references
 run.py           Launcher (starts server + opens browser)
 start.bat        One-command Windows start
 requirements.txt

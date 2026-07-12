@@ -8,6 +8,11 @@ let streetsData = null, histChart = null, radarChart = null, compareChart = null
 let mapMode = null, currentScenario = "", editTargetId = null;
 
 const RASTER_STYLES = {
+  none: {
+    version: 8,
+    sources: {},
+    layers: [{ id: "bg", type: "background", paint: { "background-color": "#0d1621" } }],
+  },
   vector: {
     version: 8,
     sources: {
@@ -59,7 +64,12 @@ function initMap() {
 $("basemap").addEventListener("change", (e) => {
   const wasRegion = currentRegion;
   map.setStyle(RASTER_STYLES[e.target.value]);
-  map.once("styledata", () => { if (wasRegion) renderRegion(wasRegion, false); if (drawPts.length) drawBoxPreview(); });
+  map.once("styledata", () => {
+    if (wasRegion) renderRegion(wasRegion, false);
+    if (drawPts.length) drawBoxPreview();
+    if (lastIso && $("ly_iso").checked) renderIsochrone(lastIso, false);
+    if (window.SimUI) window.SimUI.onStyleReload();
+  });
 });
 
 // ---------- bbox drawing ----------
@@ -231,6 +241,8 @@ async function loadProject(id) {
     await loadScenarios();
     await loadDecisions();
     await loadProjects();
+    await loadSavedIsochrones();
+    if (window.SimUI) window.SimUI.onProjectLoaded(currentProject);
   } catch (err) { alert("Error: " + err.message); }
   finally { spinner(false); }
 }
@@ -476,6 +488,7 @@ $("exportMenu").addEventListener("click", (e) => {
 });
 
 // ---------- isochrones ----------
+let lastIso = null;             // last computed isochrone result (for save)
 $("toolIso").addEventListener("click", () => setMapMode(mapMode === "iso" ? null : "iso"));
 $("toolEdit").addEventListener("click", () => {
   if (!currentScenario) { alert("Create/select a scenario first (Scenario sandbox)."); return; }
@@ -505,20 +518,76 @@ async function runIsochrone(lngLat) {
   } catch (err) { alert("Error: " + err.message); }
   finally { spinner(false); }
 }
-function renderIsochrone(res) {
+function renderIsochrone(res, updateState = true) {
   removeLayer("iso-fill"); removeLayer("iso-line"); removeSource("iso");
-  const colors = { 15: "#4da3ff33", 10: "#4da3ff55", 5: "#4da3ff88" };
   const feats = res.bands.map((b) => ({
     type: "Feature", properties: { minutes: b.minutes },
     geometry: { type: "Polygon", coordinates: [b.coords] },
   }));
-  const origin = { type: "Feature", geometry: { type: "Point", coordinates: res.origin }, properties: {} };
+  const before = map.getLayer("streets-line") ? "streets-line" : undefined;
   map.addSource("iso", { type: "geojson", data: { type: "FeatureCollection", features: feats } });
   map.addLayer({ id: "iso-fill", type: "fill", source: "iso",
     paint: { "fill-color": ["match", ["get", "minutes"], 5, "#2ecc71", 10, "#f1c40f", 15, "#e67e22", "#4da3ff"],
-      "fill-opacity": 0.25 } }, "streets-line");
+      "fill-opacity": 0.25 } }, before);
   map.addLayer({ id: "iso-line", type: "line", source: "iso",
     paint: { "line-color": "#4da3ff", "line-width": 1 } });
+  if (updateState) {
+    lastIso = res;
+    $("ly_iso").checked = true;
+    applyIsoVisibility();
+    $("isoSaveBtn").disabled = false;
+  }
+}
+function applyIsoVisibility() {
+  const vis = $("ly_iso").checked ? "visible" : "none";
+  ["iso-fill", "iso-line"].forEach((l) => { if (map.getLayer(l)) map.setLayoutProperty(l, "visibility", vis); });
+}
+$("ly_iso").addEventListener("change", applyIsoVisibility);
+$("isoClearBtn").addEventListener("click", () => {
+  removeLayer("iso-fill"); removeLayer("iso-line"); removeSource("iso");
+  lastIso = null; $("isoSaveBtn").disabled = true;
+});
+$("isoSaveBtn").addEventListener("click", async () => {
+  if (!lastIso || !currentRegion) return;
+  const name = prompt("Name this isochrone:",
+    `${$("isoMode").value} @ ${lastIso.origin.map((v) => v.toFixed(4)).join(", ")}`);
+  if (!name) return;
+  try {
+    await api(`/api/regions/${currentRegion}/isochrones/save`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, mode: lastIso.mode, origin: lastIso.origin, bands: lastIso.bands }),
+    });
+    await loadSavedIsochrones();
+    status(`Isochrone "${name}" saved.`);
+  } catch (err) { alert("Error: " + err.message); }
+});
+async function loadSavedIsochrones() {
+  const box = $("isoSavedList");
+  if (!currentRegion) { box.innerHTML = '<div class="muted">Load a project first.</div>'; return; }
+  try {
+    const saves = await api(`/api/regions/${currentRegion}/isochrones/saved`);
+    box.innerHTML = saves.length ? "" : '<div class="muted">No saved isochrones.</div>';
+    saves.forEach((s) => {
+      const el = document.createElement("div");
+      el.className = "proj-item iso-item";
+      el.innerHTML = `<div><div>${s.name}</div><div class="meta">${s.mode}</div></div>
+        <span class="del" title="Delete">✕</span>`;
+      el.onclick = async (ev) => {
+        if (ev.target.className === "del") return;
+        try {
+          const full = await api(`/api/isochrones/saved/${s.id}`);
+          renderIsochrone(full);
+          map.flyTo({ center: full.origin, zoom: Math.max(map.getZoom(), 13.5) });
+        } catch (err) { alert("Error: " + err.message); }
+      };
+      el.querySelector(".del").onclick = async (ev) => {
+        ev.stopPropagation();
+        await api(`/api/isochrones/saved/${s.id}`, { method: "DELETE" });
+        loadSavedIsochrones().catch(console.error);
+      };
+      box.appendChild(el);
+    });
+  } catch (err) { console.error(err); }
 }
 
 // ---------- optimization ----------
