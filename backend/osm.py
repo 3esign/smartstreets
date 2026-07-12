@@ -125,7 +125,15 @@ def fetch_overpass(query):
                 # Use timeout of 200 seconds to allow the server to complete heavy queries
                 resp = requests.post(url, data={"data": query}, timeout=200)
                 if resp.status_code == 200:
-                    return resp.json()
+                    try:
+                        res_json = resp.json()
+                        if "remark" in res_json:
+                            last_err = f"Overpass server remark from {url}: {res_json['remark']}"
+                            continue
+                        return res_json
+                    except ValueError as json_err:
+                        last_err = f"JSON decode error from {url}: {json_err}"
+                        continue
                 
                 last_err = f"HTTP {resp.status_code} from {url}"
                 if resp.status_code == 429:
