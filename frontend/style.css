@@ -208,3 +208,133 @@ input[type=range] { accent-color: var(--accent); }
 .maplibregl-ctrl-group button { background: transparent !important; }
 .maplibregl-ctrl-group button + button { border-top: 1px solid var(--border) !important; }
 .maplibregl-ctrl-icon { filter: invert(.85); }
+
+/* ---------- global tooltips ---------- */
+.global-tooltip {
+  position: absolute;
+  background: rgba(14, 20, 29, 0.96);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  max-width: 250px;
+  z-index: 99999;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  line-height: 1.45;
+  backdrop-filter: blur(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+/* ---------- CADI signature ---------- */
+.cadi-signature {
+  font-size: 10.5px;
+  color: var(--muted);
+  background: rgba(77, 163, 255, 0.07);
+  border: 1px solid rgba(77, 163, 255, 0.2);
+  padding: 5px 12px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  user-select: none;
+}
+.cadi-signature:hover {
+  background: rgba(77, 163, 255, 0.14);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* ---------- methodology modal ---------- */
+.methodology-box {
+  width: 540px !important;
+  max-width: 90vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 !important;
+  overflow: hidden;
+}
+.methodology-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg2);
+}
+.methodology-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.close-modal {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: bold;
+  transition: color 0.15s;
+}
+.close-modal:hover {
+  color: var(--bad);
+}
+.methodology-content {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.methodology-content h4 {
+  margin: 16px 0 6px;
+  font-size: 12.5px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.methodology-content h4:first-of-type {
+  margin-top: 0;
+}
+.methodology-content p {
+  margin: 0 0 10px;
+  color: var(--muted);
+}
+.methodology-content ul {
+  margin: 0 0 14px;
+  padding-left: 18px;
+  color: var(--muted);
+}
+.methodology-content li {
+  margin-bottom: 5px;
+}
+.methodology-content strong {
+  color: var(--text);
+}
+.methodology-footer {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+.cadi-stamp {
+  font-weight: 700;
+  color: var(--text) !important;
+  margin-bottom: 4px !important;
+  font-size: 11.5px;
+}
+.methodology-footer .signature {
+  font-style: italic;
+  color: var(--accent) !important;
+  font-size: 12.5px;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+.methodology-footer .email {
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--muted2);
+}
+

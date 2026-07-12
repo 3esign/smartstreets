@@ -21,8 +21,17 @@
     <div class="project-name" id="projectLabel">No project loaded</div>
     <div class="spacer"></div>
     <span id="statusMsg" class="status-msg"></span>
+    
+    <div class="cadi-signature" id="signatureBtn" data-tooltip="Center for Applied Design Intelligence (CADI) & PhD Poturak Semir. Click to view detailed scientific methodology.">
+      <span>CADI · PhD Poturak Semir</span>
+    </div>
+    
     <div class="menu-wrap">
-      <button id="exportBtn" class="btn topbtn">Export ▾</button>
+      <button id="methodologyBtn" class="btn topbtn" data-tooltip="Click to open the methodology overlay detailing formulas, indicators, and urban modeling indices.">Methodology</button>
+    </div>
+    
+    <div class="menu-wrap">
+      <button id="exportBtn" class="btn topbtn" data-tooltip="Export analytical reports, CSV structures, or GeoJSON layers.">Export ▾</button>
       <div id="exportMenu" class="menu hidden">
         <div class="menu-item" data-export="report">Open report (print / PDF)</div>
         <div class="menu-item" data-export="csv">Download streets CSV</div>
@@ -37,21 +46,21 @@
       <section class="panel">
         <h3>Projects</h3>
         <div id="projectList" class="list"></div>
-        <button id="newProjectBtn" class="btn primary">+ New Project (Draw BBox)</button>
+        <button id="newProjectBtn" class="btn primary" data-tooltip="Initiate bounding box drawing to ingest OpenStreetMap layers for urban assessment.">+ New Project (Draw BBox)</button>
       </section>
 
-      <section class="panel">
+      <section class="panel" data-tooltip="Control the layers shown on the active map display.">
         <h3>Layers</h3>
-        <label class="chk"><input type="checkbox" id="ly_streets" checked> Streets</label>
-        <label class="chk"><input type="checkbox" id="ly_pedestrian" checked> Pedestrian</label>
-        <label class="chk"><input type="checkbox" id="ly_cycling" checked> Cycling</label>
-        <label class="chk"><input type="checkbox" id="ly_transit"> Transit routes</label>
-        <label class="chk"><input type="checkbox" id="ly_transit_stops"> Transit stops</label>
-        <label class="chk"><input type="checkbox" id="ly_pois"> POIs</label>
-        <label class="chk"><input type="checkbox" id="ly_buildings"> Buildings</label>
+        <label class="chk" data-tooltip="Toggle road network lines. Highlighting can be styled by different metrics."><input type="checkbox" id="ly_streets" checked> Streets</label>
+        <label class="chk" data-tooltip="Toggle pedestrian paths. Colored by computed Walkability index (0 = poor, 1 = excellent)."><input type="checkbox" id="ly_pedestrian" checked> Pedestrian</label>
+        <label class="chk" data-tooltip="Toggle cycling infrastructure. Colored by Level of Traffic Stress (LTS) (1 = safe, 4 = high stress)."><input type="checkbox" id="ly_cycling" checked> Cycling</label>
+        <label class="chk" data-tooltip="Toggle transit line routing structures (bus, tram, rail, subway)."><input type="checkbox" id="ly_transit"> Transit routes</label>
+        <label class="chk" data-tooltip="Toggle bus/rail stations and stops. Density correlates to local accessibility."><input type="checkbox" id="ly_transit_stops"> Transit stops</label>
+        <label class="chk" data-tooltip="Toggle Points of Interest (schools, shops, clinics) shaping the accessibility profile."><input type="checkbox" id="ly_pois"> POIs</label>
+        <label class="chk" data-tooltip="Toggle 3D building outlines extruded by height or floor count."><input type="checkbox" id="ly_buildings"> Buildings</label>
 
         <h4>Color streets by</h4>
-        <select id="colorBy">
+        <select id="colorBy" data-tooltip="Select the active metric to style the street network. Used to evaluate bottlenecks and environmental exposure.">
           <option value="street_iq">StreetIQ (composite)</option>
           <option value="betweenness">Betweenness centrality</option>
           <option value="closeness">Closeness centrality</option>
@@ -63,7 +72,7 @@
         </select>
 
         <h4>Time of day</h4>
-        <select id="timeSlot">
+        <select id="timeSlot" data-tooltip="Adjust temporal flow multipliers to simulate morning rush, evening peaks, or quiet nights.">
           <option value="morning_rush">Morning rush</option>
           <option value="midday" selected>Midday</option>
           <option value="evening_rush">Evening rush</option>
@@ -71,7 +80,7 @@
         </select>
 
         <h4>Basemap</h4>
-        <select id="basemap">
+        <select id="basemap" data-tooltip="Swap between the vector OpenStreetMap cartography and high-resolution Esri satellite imagery.">
           <option value="vector">Vector (OSM)</option>
           <option value="satellite">Satellite (Esri)</option>
         </select>
@@ -82,9 +91,9 @@
     <div id="mapWrap">
       <div id="map"></div>
       <div class="map-tools">
-        <button id="toolIso" class="tool" title="Click a point for reachability">◎ Isochrone</button>
-        <button id="toolEdit" class="tool" title="Click a street to edit it in the active scenario">✎ Edit roads</button>
-        <select id="isoMode" class="tool-select" title="Isochrone mode">
+        <button id="toolIso" class="tool" title="Click a point for reachability" data-tooltip="Compute accessible walking, cycling, or driving service areas (5, 10, 15 minutes) from a clicked point.">◎ Isochrone</button>
+        <button id="toolEdit" class="tool" title="Click a street to edit it in the active scenario" data-tooltip="Click street segments to close them, alter travel speeds, or modify directionality inside the active scenario.">✎ Edit roads</button>
+        <select id="isoMode" class="tool-select" title="Isochrone mode" data-tooltip="Choose mode of travel for the isochrone generator.">
           <option value="walk">Walk</option>
           <option value="cycle">Cycle</option>
           <option value="drive">Drive</option>
@@ -104,6 +113,7 @@
           <p>Turn open street data into explainable urban-design decisions. Search a
              city or draw a bounding box to fetch the network, then explore analytics,
              isochrones, optimization and scenarios.</p>
+          <p class="muted" style="margin-top:-10px; font-size:11px;">Certified by PhD Poturak Semir & Center for Applied Design Intelligence</p>
           <div class="welcome-actions">
             <button id="welcomeSearch" class="btn primary">Search a city</button>
             <button id="welcomeDraw" class="btn">Draw a bounding box</button>
@@ -117,61 +127,63 @@
 
     <!-- RIGHT SIDEBAR -->
     <aside id="right">
-      <section class="panel">
+      <section class="panel" data-tooltip="Key metrics summarizing length, safety, walkability, noise, and data completeness for the active project.">
         <h3>Analysis</h3>
         <div id="statCards" class="stat-cards">
           <div class="muted">Load or create a project to see metrics.</div>
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel" data-tooltip="Adjust metric weights to recalculate the custom composite StreetIQ score.">
         <h3>StreetIQ weights</h3>
-        <label class="slider">Centrality <input type="range" id="w_centrality" min="0" max="1" step="0.05" value="0.35"><span>0.35</span></label>
-        <label class="slider">Flow <input type="range" id="w_flow" min="0" max="1" step="0.05" value="0.25"><span>0.25</span></label>
-        <label class="slider">Emissions <input type="range" id="w_emissions" min="0" max="1" step="0.05" value="0.20"><span>0.20</span></label>
-        <label class="slider">Noise <input type="range" id="w_noise" min="0" max="1" step="0.05" value="0.20"><span>0.20</span></label>
-        <button id="recomputeBtn" class="btn">Recompute StreetIQ</button>
+        <label class="slider" data-tooltip="Weight of topological importance in grid routing.">Centrality <input type="range" id="w_centrality" min="0" max="1" step="0.05" value="0.35"><span>0.35</span></label>
+        <label class="slider" data-tooltip="Weight of potential traffic volumes on road segments.">Flow <input type="range" id="w_flow" min="0" max="1" step="0.05" value="0.25"><span>0.25</span></label>
+        <label class="slider" data-tooltip="Weight of estimated carbon emissions per segment.">Emissions <input type="range" id="w_emissions" min="0" max="1" step="0.05" value="0.20"><span>0.20</span></label>
+        <label class="slider" data-tooltip="Weight of simulated local traffic noise exposure.">Noise <input type="range" id="w_noise" min="0" max="1" step="0.05" value="0.20"><span>0.20</span></label>
+        <button id="recomputeBtn" class="btn" data-tooltip="Recalculate composite StreetIQ using updated weights.">Recompute StreetIQ</button>
       </section>
 
-      <section class="panel">
+      <section class="panel" data-tooltip="Trigger algorithmic recommendations to locate signal crossings, solve connectivity deficits, or resolve gridlocks.">
         <h3>Optimization</h3>
-        <button id="optSignals" class="btn">⚑ Signal placement</button>
-        <button id="optConnectivity" class="btn">⤳ Connectivity gaps</button>
-        <button id="optDirection" class="btn">➤ Direction solver</button>
-        <label class="chk" style="margin-top:8px"><input type="checkbox" id="showDecisions" checked> Show recommendations on map</label>
+        <button id="optSignals" class="btn" data-tooltip="Evaluate collision conflict points at intersections and propose optimal signal locations.">⚑ Signal placement</button>
+        <button id="optConnectivity" class="btn" data-tooltip="Identify isolated path clusters where inserting minor connectors would yield massive gains.">⤳ Connectivity gaps</button>
+        <button id="optDirection" class="btn" data-tooltip="Run a simulation to switch street directionality to maximize throughput and minimize global emissions.">➤ Direction solver</button>
+        <label class="chk" style="margin-top:8px" data-tooltip="Toggle spatial recommended highlights directly on the map structure."><input type="checkbox" id="showDecisions" checked> Show recommendations on map</label>
         <div id="optResults" class="opt-results"></div>
       </section>
 
-      <section class="panel">
+      <section class="panel" data-tooltip="Simulate designs in isolated sandboxes to evaluate closure impacts or one-way modifications.">
         <h3>Scenario sandbox</h3>
-        <select id="scenarioSel"><option value="">Baseline (no scenario)</option></select>
-        <button id="newScenario" class="btn">+ New scenario</button>
+        <select id="scenarioSel" data-tooltip="Swap between the baseline OSM network and custom designed scenarios."><option value="">Baseline (no scenario)</option></select>
+        <button id="newScenario" class="btn" data-tooltip="Create a new clean design branch to draft road changes.">+ New scenario</button>
         <div class="scenario-row">
-          <button id="undoBtn" class="btn small2">↶ Undo</button>
-          <button id="redoBtn" class="btn small2">↷ Redo</button>
-          <button id="compareBtn" class="btn small2">⇄ Compare</button>
+          <button id="undoBtn" class="btn small2" data-tooltip="Revert the last modification made in this scenario.">↶ Undo</button>
+          <button id="redoBtn" class="btn small2" data-tooltip="Redo the last reverted modification.">↷ Redo</button>
+          <button id="compareBtn" class="btn small2" data-tooltip="Compare active design scenario parameters side-by-side with baseline metrics.">⇄ Compare</button>
         </div>
         <div id="scenarioOverrides" class="muted" style="margin-top:6px">No active scenario.</div>
-        <canvas id="compareChart" height="130" style="margin-top:8px"></canvas>
+        <canvas id="compareChart" height="130" style="margin-top:8px" data-tooltip="Graph representing deviation of key metrics (emissions, noise, StreetIQ) from baseline."></canvas>
       </section>
 
       <section class="panel">
         <h3>Distribution</h3>
-        <canvas id="histChart" height="140"></canvas>
+        <canvas id="histChart" height="140" data-tooltip="Bar chart showing the frequency distribution of selected street metric."></canvas>
         <h4>Region profile</h4>
-        <canvas id="radarChart" height="180"></canvas>
+        <canvas id="radarChart" height="180" data-tooltip="Radar display charting relative strengths of the network across 6 indexes."></canvas>
       </section>
     </aside>
   </div>
 
   <!-- STATUS BAR -->
-  <footer id="statusbar">
+  <footer id="statusbar" data-tooltip="General summary of loaded geospatial elements inside the active viewport.">
     <span id="sb_edges">Edges: —</span>
     <span id="sb_nodes">Nodes: —</span>
     <span id="sb_transit">Transit: —</span>
     <span id="sb_pois">POIs: —</span>
     <span id="sb_area">Area: —</span>
     <span id="sb_tier">Tier: —</span>
+    <span class="spacer"></span>
+    <span style="color:var(--muted2)">Certified by PhD Poturak Semir & CADI</span>
   </footer>
 
   <!-- New project modal -->
@@ -199,6 +211,49 @@
         <button class="btn" data-edit="speed50">Set speed 50</button>
       </div>
       <button id="editCancel" class="btn">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Methodology Modal -->
+  <div id="methodologyModal" class="modal hidden">
+    <div class="modal-box methodology-box">
+      <div class="methodology-header">
+        <h3>SmartStreet Scientific Methodology</h3>
+        <span class="close-modal" id="methodologyClose">✕</span>
+      </div>
+      <div class="methodology-content">
+        <p class="muted">SmartStreet integrates graph theory, traffic micro-simulation models, and environmental physics to build actionable, explainable indices for street design.</p>
+        
+        <h4>1. StreetIQ Composite Index</h4>
+        <p>The StreetIQ index models the harmony between vehicular throughput utility and human-scale livability. It aggregates four key normalized indicators:</p>
+        <ul>
+          <li><strong>Centrality:</strong> Combines Betweenness Centrality (likelihood of a road being chosen as shortest path) and Closeness Centrality (how accessible a road is from all other points in the network) using NetworkX topological calculations.</li>
+          <li><strong>Modeled Flow:</strong> Employs a gravity routing algorithm estimating neighborhood-level commuter traffic potential.</li>
+          <li><strong>CO₂ Emissions:</strong> Approximated greenhouse impact based on simulated vehicular speeds, flow volume, and road-tier classification.</li>
+          <li><strong>Noise Level (dB):</strong> A logarithmic acoustic simulation calculating decibel propagation based on traffic flow density and speed variables.</li>
+        </ul>
+
+        <h4>2. Active Travel Metrics</h4>
+        <p>Indices representing walking and cycling comfort levels parsed from raw OSM geometry attributes:</p>
+        <ul>
+          <li><strong>Walkability Score:</strong> Evaluates pedestrian safety using pavement surface tags, pathway isolation, and nocturnal lighting.</li>
+          <li><strong>Level of Traffic Stress (LTS):</strong> Ranks street segments (LTS 1 to 4) representing cycling feasibility, from quiet residential streets up to speed-mixed heavy traffic arterials.</li>
+        </ul>
+
+        <h4>3. Algorithmic Optimization Suite</h4>
+        <p>Urban optimization functions designed to identify design enhancements:</p>
+        <ul>
+          <li><strong>Signal Placement:</strong> Identifies collision risk and pedestrian isolation conflict points at major road junctions using convergent capacity models.</li>
+          <li><strong>Connectivity Gaps:</strong> Evaluates fragmented pathways to locate target locations where minor pedestrian/cycleway inserts yield maximum network integration.</li>
+          <li><strong>Direction Solver:</strong> Performs greedy directionality switches across selected segments to minimize aggregate traffic bottlenecks and local emissions.</li>
+        </ul>
+
+        <div class="methodology-footer">
+          <p><strong>Developed &amp; Certified by:</strong></p>
+          <p class="cadi-stamp">Center for Applied Design Intelligence (CADI)</p>
+          <p class="signature">PhD Poturak Semir<br><span class="email">poturaksemir@gmail.com</span></p>
+        </div>
+      </div>
     </div>
   </div>
 

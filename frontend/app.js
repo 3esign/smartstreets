@@ -46,7 +46,7 @@ async function api(path, opts) {
 function initMap() {
   map = new maplibregl.Map({
     container: "map", style: RASTER_STYLES.vector,
-    center: [14.5, 46.05], zoom: 12,
+    center: [20.5181, 43.1407], zoom: 13,
   });
   map.addControl(new maplibregl.NavigationControl(), "top-left");
   map.on("click", onMapClick);
@@ -763,4 +763,64 @@ function selectPlace(r) {
   }
 }
 
+// ---------- global tooltip float system ----------
+let tooltipEl = null;
+function initTooltips() {
+  tooltipEl = document.createElement("div");
+  tooltipEl.className = "global-tooltip hidden";
+  document.body.appendChild(tooltipEl);
+
+  document.addEventListener("mouseover", (e) => {
+    const target = e.target.closest("[data-tooltip]");
+    if (!target) return;
+    
+    const text = target.getAttribute("data-tooltip");
+    if (!text) return;
+    
+    tooltipEl.textContent = text;
+    tooltipEl.classList.remove("hidden");
+    
+    const rect = target.getBoundingClientRect();
+    const ttRect = tooltipEl.getBoundingClientRect();
+    
+    let top = rect.top - ttRect.height - 8;
+    let left = rect.left + (rect.width - ttRect.width) / 2;
+    
+    if (top < 8) top = rect.bottom + 8;
+    if (left < 8) left = 8;
+    if (left + ttRect.width > window.innerWidth - 8) {
+      left = window.innerWidth - ttRect.width - 8;
+    }
+    
+    tooltipEl.style.top = `${top + window.scrollY}px`;
+    tooltipEl.style.left = `${left + window.scrollX}px`;
+  });
+
+  document.addEventListener("mouseout", (e) => {
+    const target = e.target.closest("[data-tooltip]");
+    if (target) {
+      tooltipEl.classList.add("hidden");
+    }
+  });
+}
+
+// ---------- methodology modal ----------
+function initMethodologyModal() {
+  const modal = $("methodologyModal");
+  const openBtn = $("methodologyBtn");
+  const signBtn = $("signatureBtn");
+  const closeBtn = $("methodologyClose");
+
+  const open = () => modal.classList.remove("hidden");
+  const close = () => modal.classList.add("hidden");
+
+  if (openBtn) openBtn.onclick = open;
+  if (signBtn) signBtn.onclick = open;
+  if (closeBtn) closeBtn.onclick = close;
+
+  modal.onclick = (e) => { if (e.target === modal) close(); };
+}
+
 initMap();
+initTooltips();
+initMethodologyModal();
