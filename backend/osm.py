@@ -13,8 +13,11 @@ import requests
 from . import database as db
 
 OVERPASS_URLS = [
-    "https://overpass-api.de/api/interpreter",
+    "https://overpass.nchc.org.tw/api/interpreter",
+    "https://overpass.osm.ch/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.openstreetmap.ru/api/interpreter",
 ]
 
 # Highway classes considered "vehicular streets"
@@ -115,16 +118,33 @@ out body geom;
 
 def fetch_overpass(query):
     last_err = None
-    for url in OVERPASS_URLS:
-        try:
-            resp = requests.post(url, data={"data": query}, timeout=200)
-            if resp.status_code == 200:
-                return resp.json()
-            last_err = f"HTTP {resp.status_code} from {url}"
-        except requests.RequestException as exc:  # noqa: PERF203
-            last_err = str(exc)
+    max_passes = 3  # Attempt to fetch from all endpoints in rotation up to 3 times
+    for pass_idx in range(max_passes):
+        for url in OVERPASS_URLS:
+            try:
+                # Use timeout of 200 seconds to allow the server to complete heavy queries
+                resp = requests.post(url, data={"data": query}, timeout=200)
+                if resp.status_code == 200:
+                    return resp.json()
+                
+                last_err = f"HTTP {resp.status_code} from {url}"
+                if resp.status_code == 429:
+                    # Rate limited: skip immediately to try another mirror
+                    continue
+                elif resp.status_code in (502, 503, 504):
+                    # Server busy/timeout: skip immediately to try another mirror
+                    continue
+            except requests.RequestException as exc:
+                last_err = f"Connection error: {exc} for {url}"
+            
+            # Short sleep before trying next URL to avoid slamming endpoints
             time.sleep(1)
-    raise RuntimeError(f"Overpass fetch failed: {last_err}")
+            
+        if pass_idx < max_passes - 1:
+            # Wait with exponential backoff before making another pass through all endpoints
+            time.sleep(2 * (pass_idx + 1))
+            
+    raise RuntimeError(f"Overpass fetch failed (all endpoints exhausted): {last_err}")
 
 
 def _cycle_type(tags):
