@@ -3,6 +3,7 @@
 // For a split deploy (frontend on Vercel), set window.SMARTSTREET_API in config.js.
 const API = (window.SMARTSTREET_API || "").replace(/\/+$/, "");
 let map, currentProject = null, currentRegion = null, drawing = false, drawPts = [];
+let isMouseDown = false, dragStarted = false, startPt = null;
 let streetsData = null, histChart = null, radarChart = null, compareChart = null;
 let mapMode = null, currentScenario = "", editTargetId = null;
 
@@ -49,6 +50,9 @@ function initMap() {
   });
   map.addControl(new maplibregl.NavigationControl(), "top-left");
   map.on("click", onMapClick);
+  map.on("mousedown", onMapMouseDown);
+  map.on("mousemove", onMapMouseMove);
+  map.on("mouseup", onMapMouseUp);
   map.on("load", loadProjects);
 }
 
@@ -63,20 +67,61 @@ $("newProjectBtn").addEventListener("click", startDraw);
 $("cancelDraw").addEventListener("click", cancelDraw);
 function startDraw() {
   drawing = true; drawPts = [];
+  isMouseDown = false; dragStarted = false; startPt = null;
+  if (map && map.dragPan) map.dragPan.disable();
   $("drawHint").classList.remove("hidden");
   $("areaReadout").textContent = "";
   map.getCanvas().style.cursor = "crosshair";
 }
 function cancelDraw() {
   drawing = false; drawPts = [];
+  isMouseDown = false; dragStarted = false; startPt = null;
+  if (map && map.dragPan) map.dragPan.enable();
   $("drawHint").classList.add("hidden");
   map.getCanvas().style.cursor = "";
   removeLayer("bbox-fill"); removeLayer("bbox-line"); removeSource("bbox");
 }
+function onMapMouseDown(e) {
+  if (!drawing) return;
+  isMouseDown = true;
+  dragStarted = false;
+  startPt = e.lngLat;
+}
+function onMapMouseMove(e) {
+  if (!drawing) return;
+  if (isMouseDown) {
+    dragStarted = true;
+    drawPts = [[startPt.lng, startPt.lat], [e.lngLat.lng, e.lngLat.lat]];
+    drawBoxPreview();
+    const area = bboxAreaKm2(bboxFromPts());
+    $("areaReadout").textContent = ` Live: ${area.toFixed(2)} km²`;
+  } else if (drawPts.length === 1) {
+    drawBoxPreview([e.lngLat.lng, e.lngLat.lat]);
+    const a = drawPts[0];
+    const b = [e.lngLat.lng, e.lngLat.lat];
+    const area = bboxAreaKm2([Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])]);
+    $("areaReadout").textContent = ` Live: ${area.toFixed(2)} km²`;
+  }
+}
+function onMapMouseUp(e) {
+  if (!drawing || !isMouseDown) return;
+  isMouseDown = false;
+  if (dragStarted) {
+    drawPts = [[startPt.lng, startPt.lat], [e.lngLat.lng, e.lngLat.lat]];
+    drawBoxPreview();
+    finishDraw();
+  }
+}
 function onMapClick(e) {
   if (drawing) {
+    if (dragStarted) return;
     drawPts.push([e.lngLat.lng, e.lngLat.lat]);
-    if (drawPts.length === 2) { drawBoxPreview(); finishDraw(); }
+    if (drawPts.length === 1) {
+      // Draw single point representation or wait for move
+    } else if (drawPts.length === 2) {
+      drawBoxPreview();
+      finishDraw();
+    }
     return;
   }
   if (mapMode === "iso") { runIsochrone(e.lngLat); return; }
@@ -86,9 +131,17 @@ function bboxFromPts() {
   const [a, b] = drawPts;
   return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
 }
-function drawBoxPreview() {
-  if (drawPts.length < 2) return;
-  const [w, s, e, n] = bboxFromPts();
+function drawBoxPreview(tempPt = null) {
+  let pts = [...drawPts];
+  if (tempPt) pts.push(tempPt);
+  if (pts.length < 2) return;
+  
+  const [a, b] = pts;
+  const w = Math.min(a[0], b[0]);
+  const s = Math.min(a[1], b[1]);
+  const e = Math.max(a[0], b[0]);
+  const n = Math.max(a[1], b[1]);
+
   const poly = { type: "Feature", geometry: { type: "Polygon", coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] } };
   if (map.getSource("bbox")) map.getSource("bbox").setData(poly);
   else {
@@ -99,6 +152,8 @@ function drawBoxPreview() {
 }
 function finishDraw() {
   drawing = false;
+  isMouseDown = false; dragStarted = false; startPt = null;
+  if (map && map.dragPan) map.dragPan.enable();
   map.getCanvas().style.cursor = "";
   const area = bboxAreaKm2(bboxFromPts());
   $("areaReadout").textContent = ` ${area.toFixed(2)} km²`;
