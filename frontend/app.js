@@ -83,6 +83,7 @@ function cancelDraw() {
 }
 function onMapMouseDown(e) {
   if (!drawing) return;
+  e.preventDefault(); // Stop MapLibre from initiating a drag pan/pitch
   isMouseDown = true;
   dragStarted = false;
   startPt = e.lngLat;
@@ -190,24 +191,28 @@ async function createProject() {
 
 // ---------- projects list ----------
 async function loadProjects() {
-  const projects = await api("/api/projects");
-  const list = $("projectList");
-  list.innerHTML = projects.length ? "" : '<div class="muted">No projects yet.</div>';
-  projects.forEach((p) => {
-    const el = document.createElement("div");
-    el.className = "proj-item" + (currentProject && currentProject.id === p.id ? " active" : "");
-    el.innerHTML = `<div><div>${p.name}</div><div class="meta">tier ${p.detail_tier} · #${p.id}</div></div>
-      <span class="del" title="Delete">✕</span>`;
-    el.addEventListener("click", (ev) => { if (ev.target.classList.contains("del")) return; loadProject(p.id); });
-    el.querySelector(".del").addEventListener("click", (ev) => { ev.stopPropagation(); deleteProject(p.id, p.name); });
-    list.appendChild(el);
-  });
+  try {
+    const projects = await api("/api/projects");
+    const list = $("projectList");
+    list.innerHTML = projects.length ? "" : '<div class="muted">No projects yet.</div>';
+    projects.forEach((p) => {
+      const el = document.createElement("div");
+      el.className = "proj-item" + (currentProject && currentProject.id === p.id ? " active" : "");
+      el.innerHTML = `<div><div>${p.name}</div><div class="meta">tier ${p.detail_tier} · #${p.id}</div></div>
+        <span class="del" title="Delete">✕</span>`;
+      el.onclick = (ev) => { if (ev.target.className !== "del") loadProject(p.id); };
+      el.querySelector(".del").onclick = (ev) => { ev.stopPropagation(); deleteProject(p.id, p.name).catch(console.error); };
+      list.appendChild(el);
+    });
+  } catch (err) { console.error(err); }
 }
 async function deleteProject(id, name) {
   if (!confirm(`Delete project "${name}"?`)) return;
-  await api(`/api/projects/${id}`, { method: "DELETE" });
-  if (currentProject && currentProject.id === id) { currentProject = null; currentRegion = null; }
-  await loadProjects();
+  try {
+    await api(`/api/projects/${id}`, { method: "DELETE" });
+    if (currentProject && currentProject.id === id) { currentProject = null; currentRegion = null; }
+    await loadProjects();
+  } catch (err) { alert("Error: " + err.message); }
 }
 
 // ---------- load & render a project ----------
@@ -230,10 +235,13 @@ async function loadProject(id) {
   finally { spinner(false); }
 }
 
-function applyLayerState(s) {
-  const map = { streets: "ly_streets", pedestrian: "ly_pedestrian", cycling: "ly_cycling",
-    transit: "ly_transit", pois: "ly_pois", buildings: "ly_buildings" };
-  Object.entries(map).forEach(([k, id]) => { if (s[k] !== undefined) $(id).checked = !!s[k]; });
+function applyLayerState(ls) {
+  const m = {
+    streets: "ly_streets", pedestrian: "ly_pedestrian", cycling: "ly_cycling",
+    transit: "ly_transit", transit_stops: "ly_transit_stops", pois: "ly_pois", buildings: "ly_buildings"
+  };
+  for (const [k, v] of Object.entries(m)) if (ls[k] !== undefined) $(v).checked = !!ls[k];
+  applyLayerVisibility();
 }
 
 const LAYER_IDS = ["buildings-fill", "streets-line", "ped-line", "cyc-line",
@@ -305,7 +313,7 @@ async function renderRegion(regionId, fit) {
 }
 
 // ---------- color by metric ----------
-$("colorBy").addEventListener("change", () => { applyColorBy(); });
+$("colorBy").addEventListener("change", () => { applyColorBy(); loadHistogram().catch(console.error); });
 function applyColorBy() {
   if (!map.getLayer("streets-line") || !streetsData) return;
   const metric = $("colorBy").value;
@@ -344,7 +352,7 @@ function renderLegend(metric, stops) {
 // ---------- layer visibility ----------
 const VIS = { ly_streets: "streets-line", ly_pedestrian: "ped-line", ly_cycling: "cyc-line",
   ly_transit: ["transit-line"], ly_transit_stops: "tstops-pt", ly_pois: "pois-pt", ly_buildings: "buildings-fill" };
-Object.keys(VIS).forEach((id) => $(id).addEventListener("change", () => { applyLayerVisibility(); saveLayerState(); }));
+Object.keys(VIS).forEach((id) => $(id).addEventListener("change", () => { applyLayerVisibility(); saveLayerState().catch(console.error); }));
 function applyLayerVisibility() {
   Object.entries(VIS).forEach(([chk, layers]) => {
     const vis = $(chk).checked ? "visible" : "none";
@@ -355,6 +363,7 @@ async function saveLayerState() {
   if (!currentProject) return;
   const s = { streets: $("ly_streets").checked, pedestrian: $("ly_pedestrian").checked,
     cycling: $("ly_cycling").checked, transit: $("ly_transit").checked,
+    transit_stops: $("ly_transit_stops").checked,
     pois: $("ly_pois").checked, buildings: $("ly_buildings").checked };
   api(`/api/projects/${currentProject.id}/layers`, { method: "PUT",
     headers: { "Content-Type": "application/json" }, body: JSON.stringify({ layer_state: s }) }).catch(() => {});
@@ -403,18 +412,19 @@ function updateStats(s) {
 async function loadHistogram() {
   if (!currentRegion) return;
   const metric = $("colorBy").value === "highway" ? "street_iq" : $("colorBy").value;
-  const h = await api(`/api/regions/${currentRegion}/histogram?metric=${metric}`);
-  const labels = h.bins.slice(0, -1).map((b) => b.toFixed(2));
-  if (histChart) histChart.destroy();
-  histChart = new Chart($("histChart"), {
-    type: "bar",
-    data: { labels, datasets: [{ label: metric, data: h.counts, backgroundColor: "#4da3ff" }] },
-    options: { plugins: { legend: { display: false } },
-      scales: { x: { ticks: { color: "#8595a5", maxTicksLimit: 6 }, grid: { display: false } },
-        y: { ticks: { color: "#8595a5" }, grid: { color: "#2b3b4d" } } } },
-  });
+  try {
+    const h = await api(`/api/regions/${currentRegion}/histogram?metric=${metric}`);
+    const labels = h.bins.slice(0, -1).map((b) => b.toFixed(2));
+    if (histChart) histChart.destroy();
+    histChart = new Chart($("histChart"), {
+      type: "bar",
+      data: { labels, datasets: [{ label: metric, data: h.counts, backgroundColor: "#4da3ff" }] },
+      options: { plugins: { legend: { display: false } },
+        scales: { x: { ticks: { color: "#8595a5", maxTicksLimit: 6 }, grid: { display: false } },
+          y: { ticks: { color: "#8595a5" }, grid: { color: "#2b3b4d" } } } },
+    });
+  } catch (e) { console.error(e); }
 }
-$("colorBy").addEventListener("change", loadHistogram);
 
 // ---------- weights / recompute ----------
 document.querySelectorAll(".slider input").forEach((inp) => {
@@ -459,7 +469,7 @@ document.addEventListener("click", () => $("exportMenu").classList.add("hidden")
 $("exportMenu").addEventListener("click", (e) => {
   const kind = e.target.dataset.export;
   if (!kind || !currentRegion) { if (!currentRegion) alert("Load a project first."); return; }
-  const base = `/api/regions/${currentRegion}`;
+  const base = `${API}/api/regions/${currentRegion}`;
   if (kind === "report") window.open(`${base}/report?name=${encodeURIComponent(currentProject?.name || "SmartStreet")}`, "_blank");
   if (kind === "csv") window.open(`${base}/export/streets.csv`, "_blank");
   if (kind === "geojson") window.open(`${base}/export/streets.geojson`, "_blank");
@@ -512,9 +522,9 @@ function renderIsochrone(res) {
 }
 
 // ---------- optimization ----------
-$("optSignals").addEventListener("click", () => runOptimize("signals"));
-$("optConnectivity").addEventListener("click", () => runOptimize("connectivity"));
-$("optDirection").addEventListener("click", () => runOptimize("direction"));
+$("optSignals").addEventListener("click", () => runOptimize("signals").catch(console.error));
+$("optConnectivity").addEventListener("click", () => runOptimize("connectivity").catch(console.error));
+$("optDirection").addEventListener("click", () => runOptimize("direction").catch(console.error));
 $("showDecisions").addEventListener("change", () => {
   const vis = $("showDecisions").checked ? "visible" : "none";
   ["dec-signal", "dec-line"].forEach((l) => { if (map.getLayer(l)) map.setLayoutProperty(l, "visibility", vis); });
