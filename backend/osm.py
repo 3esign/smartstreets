@@ -13,12 +13,17 @@ import requests
 from . import database as db
 
 OVERPASS_URLS = [
-    "https://overpass.nchc.org.tw/api/interpreter",
-    "https://overpass.osm.ch/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
     "https://overpass-api.de/api/interpreter",
-    "https://overpass.openstreetmap.ru/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    "https://overpass.osm.ch/api/interpreter",
 ]
+
+_SESSION = requests.Session()
+_SESSION.headers.update({
+    "User-Agent": "SmartStreet/1.0 (urban analytics; https://github.com/3esign/smartstreets)",
+    "Accept": "application/json",
+})
 
 # Highway classes considered "vehicular streets"
 STREET_HW = {
@@ -117,41 +122,48 @@ out body geom;
 
 
 def fetch_overpass(query):
+    """Try every mirror; retry the full rotation up to 3 times with backoff."""
     last_err = None
-    max_passes = 3  # Attempt to fetch from all endpoints in rotation up to 3 times
+    max_passes = 3
     for pass_idx in range(max_passes):
         for url in OVERPASS_URLS:
             try:
-                # Use timeout of 200 seconds to allow the server to complete heavy queries
-                resp = requests.post(url, data={"data": query}, timeout=200)
+                resp = _SESSION.post(url, data={"data": query}, timeout=200)
+
                 if resp.status_code == 200:
                     try:
-                        res_json = resp.json()
-                        if "remark" in res_json:
-                            last_err = f"Overpass server remark from {url}: {res_json['remark']}"
-                            continue
-                        return res_json
-                    except ValueError as json_err:
-                        last_err = f"JSON decode error from {url}: {json_err}"
+                        data = resp.json()
+                    except ValueError as ve:
+                        last_err = f"JSON decode error from {url}: {ve}"
                         continue
-                
+
+                    # Server-side error wrapped in 200
+                    if "remark" in data:
+                        last_err = f"Overpass remark from {url}: {data['remark']}"
+                        continue
+
+                    # Guard against mirrors returning empty results
+                    elements = data.get("elements", [])
+                    if not elements:
+                        last_err = f"0 elements from {url} (possibly incomplete mirror)"
+                        continue
+
+                    return data
+
                 last_err = f"HTTP {resp.status_code} from {url}"
-                if resp.status_code == 429:
-                    # Rate limited: skip immediately to try another mirror
+                # 429 / 5xx → skip to next mirror immediately
+                if resp.status_code in (429, 406, 502, 503, 504):
                     continue
-                elif resp.status_code in (502, 503, 504):
-                    # Server busy/timeout: skip immediately to try another mirror
-                    continue
+
             except requests.RequestException as exc:
-                last_err = f"Connection error: {exc} for {url}"
-            
-            # Short sleep before trying next URL to avoid slamming endpoints
+                last_err = f"Connection error ({url}): {exc}"
+
             time.sleep(1)
-            
+
+        # backoff between full passes
         if pass_idx < max_passes - 1:
-            # Wait with exponential backoff before making another pass through all endpoints
-            time.sleep(2 * (pass_idx + 1))
-            
+            time.sleep(3 * (pass_idx + 1))
+
     raise RuntimeError(f"Overpass fetch failed (all endpoints exhausted): {last_err}")
 
 
