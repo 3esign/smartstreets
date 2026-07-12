@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SmartStreet — Street & Road Intelligence</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <!-- TOP BAR -->
+  <header id="topbar">
+    <div class="brand">◆ SmartStreet</div>
+    <div class="search-wrap">
+      <input type="text" id="citySearch" placeholder="Search a city or place…" autocomplete="off" />
+      <div id="searchResults" class="search-results hidden"></div>
+    </div>
+    <div class="project-name" id="projectLabel">No project loaded</div>
+    <div class="spacer"></div>
+    <span id="statusMsg" class="status-msg"></span>
+    <div class="menu-wrap">
+      <button id="exportBtn" class="btn topbtn">Export ▾</button>
+      <div id="exportMenu" class="menu hidden">
+        <div class="menu-item" data-export="report">Open report (print / PDF)</div>
+        <div class="menu-item" data-export="csv">Download streets CSV</div>
+        <div class="menu-item" data-export="geojson">Download streets GeoJSON</div>
+      </div>
+    </div>
+  </header>
+
+  <div id="main">
+    <!-- LEFT SIDEBAR -->
+    <aside id="left">
+      <section class="panel">
+        <h3>Projects</h3>
+        <div id="projectList" class="list"></div>
+        <button id="newProjectBtn" class="btn primary">+ New Project (Draw BBox)</button>
+      </section>
+
+      <section class="panel">
+        <h3>Layers</h3>
+        <label class="chk"><input type="checkbox" id="ly_streets" checked> Streets</label>
+        <label class="chk"><input type="checkbox" id="ly_pedestrian" checked> Pedestrian</label>
+        <label class="chk"><input type="checkbox" id="ly_cycling" checked> Cycling</label>
+        <label class="chk"><input type="checkbox" id="ly_transit"> Transit routes</label>
+        <label class="chk"><input type="checkbox" id="ly_transit_stops"> Transit stops</label>
+        <label class="chk"><input type="checkbox" id="ly_pois"> POIs</label>
+        <label class="chk"><input type="checkbox" id="ly_buildings"> Buildings</label>
+
+        <h4>Color streets by</h4>
+        <select id="colorBy">
+          <option value="street_iq">StreetIQ (composite)</option>
+          <option value="betweenness">Betweenness centrality</option>
+          <option value="closeness">Closeness centrality</option>
+          <option value="modeled_flow">Modeled flow</option>
+          <option value="co2_emissions">CO₂ emissions</option>
+          <option value="noise_db">Noise (dB)</option>
+          <option value="completeness">Data quality</option>
+          <option value="highway">Road class</option>
+        </select>
+
+        <h4>Time of day</h4>
+        <select id="timeSlot">
+          <option value="morning_rush">Morning rush</option>
+          <option value="midday" selected>Midday</option>
+          <option value="evening_rush">Evening rush</option>
+          <option value="night">Night</option>
+        </select>
+
+        <h4>Basemap</h4>
+        <select id="basemap">
+          <option value="vector">Vector (OSM)</option>
+          <option value="satellite">Satellite (Esri)</option>
+        </select>
+      </section>
+    </aside>
+
+    <!-- MAP -->
+    <div id="mapWrap">
+      <div id="map"></div>
+      <div class="map-tools">
+        <button id="toolIso" class="tool" title="Click a point for reachability">◎ Isochrone</button>
+        <button id="toolEdit" class="tool" title="Click a street to edit it in the active scenario">✎ Edit roads</button>
+        <select id="isoMode" class="tool-select" title="Isochrone mode">
+          <option value="walk">Walk</option>
+          <option value="cycle">Cycle</option>
+          <option value="drive">Drive</option>
+        </select>
+      </div>
+      <div id="drawHint" class="draw-hint hidden">
+        Click two corners on the map to draw a bounding box.
+        <span id="areaReadout"></span>
+        <button id="cancelDraw" class="btn small">Cancel</button>
+      </div>
+      <div id="toolHint" class="draw-hint hidden"></div>
+      <div id="legend" class="legend hidden"></div>
+      <div id="welcome" class="welcome">
+        <div class="welcome-card">
+          <div class="welcome-mark">◆</div>
+          <h2>SmartStreet</h2>
+          <p>Turn open street data into explainable urban-design decisions. Search a
+             city or draw a bounding box to fetch the network, then explore analytics,
+             isochrones, optimization and scenarios.</p>
+          <div class="welcome-actions">
+            <button id="welcomeSearch" class="btn primary">Search a city</button>
+            <button id="welcomeDraw" class="btn">Draw a bounding box</button>
+          </div>
+          <div class="welcome-steps">
+            <span>1 · Fetch OSM</span><span>2 · Analyze</span><span>3 · Optimize</span><span>4 · Report</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT SIDEBAR -->
+    <aside id="right">
+      <section class="panel">
+        <h3>Analysis</h3>
+        <div id="statCards" class="stat-cards">
+          <div class="muted">Load or create a project to see metrics.</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>StreetIQ weights</h3>
+        <label class="slider">Centrality <input type="range" id="w_centrality" min="0" max="1" step="0.05" value="0.35"><span>0.35</span></label>
+        <label class="slider">Flow <input type="range" id="w_flow" min="0" max="1" step="0.05" value="0.25"><span>0.25</span></label>
+        <label class="slider">Emissions <input type="range" id="w_emissions" min="0" max="1" step="0.05" value="0.20"><span>0.20</span></label>
+        <label class="slider">Noise <input type="range" id="w_noise" min="0" max="1" step="0.05" value="0.20"><span>0.20</span></label>
+        <button id="recomputeBtn" class="btn">Recompute StreetIQ</button>
+      </section>
+
+      <section class="panel">
+        <h3>Optimization</h3>
+        <button id="optSignals" class="btn">⚑ Signal placement</button>
+        <button id="optConnectivity" class="btn">⤳ Connectivity gaps</button>
+        <button id="optDirection" class="btn">➤ Direction solver</button>
+        <label class="chk" style="margin-top:8px"><input type="checkbox" id="showDecisions" checked> Show recommendations on map</label>
+        <div id="optResults" class="opt-results"></div>
+      </section>
+
+      <section class="panel">
+        <h3>Scenario sandbox</h3>
+        <select id="scenarioSel"><option value="">Baseline (no scenario)</option></select>
+        <button id="newScenario" class="btn">+ New scenario</button>
+        <div class="scenario-row">
+          <button id="undoBtn" class="btn small2">↶ Undo</button>
+          <button id="redoBtn" class="btn small2">↷ Redo</button>
+          <button id="compareBtn" class="btn small2">⇄ Compare</button>
+        </div>
+        <div id="scenarioOverrides" class="muted" style="margin-top:6px">No active scenario.</div>
+        <canvas id="compareChart" height="130" style="margin-top:8px"></canvas>
+      </section>
+
+      <section class="panel">
+        <h3>Distribution</h3>
+        <canvas id="histChart" height="140"></canvas>
+        <h4>Region profile</h4>
+        <canvas id="radarChart" height="180"></canvas>
+      </section>
+    </aside>
+  </div>
+
+  <!-- STATUS BAR -->
+  <footer id="statusbar">
+    <span id="sb_edges">Edges: —</span>
+    <span id="sb_nodes">Nodes: —</span>
+    <span id="sb_transit">Transit: —</span>
+    <span id="sb_pois">POIs: —</span>
+    <span id="sb_area">Area: —</span>
+    <span id="sb_tier">Tier: —</span>
+  </footer>
+
+  <!-- New project modal -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-box">
+      <h3>Create project</h3>
+      <p class="muted" id="modalArea"></p>
+      <input type="text" id="projInput" placeholder="Project name" />
+      <div class="modal-actions">
+        <button id="modalCancel" class="btn">Cancel</button>
+        <button id="modalCreate" class="btn primary">Fetch OSM &amp; Analyze</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit road modal -->
+  <div id="editModal" class="modal hidden">
+    <div class="modal-box">
+      <h3>Edit street</h3>
+      <p class="muted" id="editTarget"></p>
+      <div class="edit-actions">
+        <button class="btn" data-edit="closure">Close road</button>
+        <button class="btn" data-edit="direction_change">Make one-way</button>
+        <button class="btn" data-edit="speed30">Set speed 30</button>
+        <button class="btn" data-edit="speed50">Set speed 50</button>
+      </div>
+      <button id="editCancel" class="btn">Cancel</button>
+    </div>
+  </div>
+
+  <div id="spinner" class="spinner hidden"><div class="spin"></div><span id="spinText">Working…</span></div>
+
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="/static/config.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

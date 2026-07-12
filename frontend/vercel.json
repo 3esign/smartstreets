@@ -1,0 +1,7 @@
+{
+  "$comment": "Deploy the frontend on Vercel with Root Directory set to 'frontend'. Replace the backend URL below with your deployed FastAPI URL (e.g. from Render). This proxies API + static asset paths so the app runs same-origin (no CORS, no config edits needed).",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://YOUR-BACKEND-URL.onrender.com/api/$1" },
+    { "source": "/static/(.*)", "destination": "/$1" }
+  ]
+}

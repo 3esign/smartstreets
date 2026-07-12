@@ -1,0 +1,11 @@
+# One free web service that serves BOTH the API and the dashboard UI.
+# Deploy: push this repo to GitHub, then on render.com → New → Blueprint,
+# point it at the repo. Render auto-detects this file + the Dockerfile.
+services:
+  - type: web
+    name: smartstreet
+    runtime: docker
+    plan: free
+    envVars:
+      - key: SMARTSTREET_DB
+        value: /tmp/smartstreet.db
